@@ -1,0 +1,20 @@
+# --- 機密：社内ドキュメントと会話履歴（サーバへは rsync で直接配置する）---
+docs/
+data/
+
+# --- 実行時に生成される状態ファイル ---
+.ingestion_state.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+
+# --- OS / エディタ ---
+.DS_Store
+
+# --- 認証情報 ---
+*.pem
+*.key
+.env
+.env.*
