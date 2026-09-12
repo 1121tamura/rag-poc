@@ -1,0 +1,9 @@
+# 開発環境専用の上書き設定
+# 素のdocker composeコマンドは自動で読み込むが、Dev Containers拡張は-fを明示指定するため
+# 自動読み込みされない。.devcontainer/devcontainer.json の dockerComposeFile に列挙して読み込ませている。
+# ホストのmacOS上で動かすOllamaに接続し、Metal（GPU）を利用する。
+# コンテナ内のOllamaはMetalにアクセスできずCPU実行になるため。
+services:
+  api:
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434

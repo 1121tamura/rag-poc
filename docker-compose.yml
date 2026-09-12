@@ -1,0 +1,39 @@
+services:
+  api:
+    build: .
+    volumes:
+      - .:/workspace
+      - hf_cache:/root/.cache/huggingface
+      - ~/.claude:/root/.claude
+    environment:
+      - HF_HOME=/root/.cache/huggingface
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - API_BASE_URL=http://localhost:8000
+    working_dir: /workspace
+    command: sleep infinity
+    ports:
+      - "8000:8000"
+      - "8501:8501"
+    depends_on:
+      - qdrant
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  qdrant_storage:
+  ollama_data:
+  hf_cache:
