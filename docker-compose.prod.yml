@@ -1,0 +1,59 @@
+# 本番用の構成（CPU環境が基本）。
+# GPU環境では docker-compose.gpu.yml を重ねて起動する：
+#   docker compose -f docker-compose.prod.yml -f docker-compose.gpu.yml up -d
+#
+# 開発用の docker-compose.yml とは別ファイルにしている。開発用はapiを sleep infinity で
+# 待機させVS Codeから中に入って作業する構成のため、そのままでは本番起動できない。
+services:
+  api:
+    build: .
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000
+    environment:
+      - HF_HOME=/root/.cache/huggingface
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - EMBEDDING_DEVICE=cpu
+      # コードはイメージに焼き込むため、取り込み状態はボリューム側に置く
+      - INGESTION_STATE_FILE=/workspace/state/.ingestion_state.json
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+      - ./docs:/workspace/docs:ro # 取り込み対象ドキュメント（ホスト側に配置する）
+      - app_data:/workspace/data # 会話履歴のSQLite
+      - ingestion_state:/workspace/state
+    working_dir: /workspace
+    restart: unless-stopped
+    depends_on:
+      - qdrant
+      - ollama
+
+  streamlit:
+    build: .
+    command: streamlit run ui/app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
+    environment:
+      - API_BASE_URL=http://api:8000 # コンテナ名で名前解決される
+    ports:
+      - "8501:8501" # 外部に公開するのはこのポートのみ
+    working_dir: /workspace
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  qdrant_storage:
+  ollama_data:
+  hf_cache:
+  app_data:
+  ingestion_state:

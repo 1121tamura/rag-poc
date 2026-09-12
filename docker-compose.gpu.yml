@@ -1,0 +1,29 @@
+# GPU環境向けの上書き設定。docker-compose.prod.yml に重ねて使う：
+#   docker compose -f docker-compose.prod.yml -f docker-compose.gpu.yml up -d
+#
+# 前提：ホストにNVIDIAドライバと NVIDIA Container Toolkit が導入されていること。
+# 未導入の場合は「could not select device driver "nvidia"」で起動に失敗する。
+#
+# 注意：apiのEmbeddingをGPUで動かすには、PyTorchをCUDA版に差し替える必要がある
+# （pyproject.toml の [tool.uv.sources] を参照）。CPU版のままでもollamaはGPUを使うため、
+# LLMの回答生成だけを先にGPU化することもできる。
+services:
+  api:
+    environment:
+      - EMBEDDING_DEVICE=cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

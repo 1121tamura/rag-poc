@@ -1,0 +1,57 @@
+[project]
+name = "rag-support-system"
+version = "0.1.0"
+description = "RAGシステム PoC"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "llama-index-core==0.14.23",
+    "llama-index-embeddings-huggingface==0.7.0",
+    "torch==2.13.0",
+    "llama-index-vector-stores-qdrant==0.10.2",
+    # qdrant-client>=1.19.0はIDF_EMBEDDING_MODELSが削除されておりllama-index-vector-stores-qdrant 0.10.2のimportが壊れるため固定
+    "qdrant-client==1.18.0",
+    "FlagEmbedding==1.4.0",
+    "llama-index-llms-ollama==0.10.1",
+    "fastapi==0.141.1",
+    "uvicorn==0.52.1",
+    "streamlit==1.61.1",
+    "requests==2.34.2",
+]
+
+[dependency-groups]
+dev = [
+    "debugpy==1.8.21",
+]
+
+[tool.uv]
+package = false
+
+# PyTorchはCPU専用版を取得している。開発環境（Devコンテナ）とCPUの本番環境向けの設定。
+#
+# GPU環境へデプロイする場合は、以下の4行をコメントアウトし、下のCUDA版の指定を有効にする。
+# CPU専用版は torch.cuda.is_available() が常にFalseを返すため、GPUがあっても使われない。
+# 手順は doc/デプロイ手順_AWS_EC2_GPU.md の4.3を参照。
+# なお Ollama（LLMの回答生成）はこの設定と無関係にGPUを使うため、
+# ここをCPU版のままにしても、LLM推論だけを先にGPU化することはできる。
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+# --- GPU環境向け（上のCPU指定と入れ替えて使う） ---
+# CUDAのバージョンはサーバに合わせること（nvidia-smi の右上に表示される値が12.4以上ならcu124でよい）
+# [tool.uv.sources]
+# torch = [{ index = "pytorch-cu124" }]
+#
+# [[tool.uv.index]]
+# name = "pytorch-cu124"
+# url = "https://download.pytorch.org/whl/cu124"
+# explicit = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
