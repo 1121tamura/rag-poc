@@ -1,0 +1,27 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "FastAPI",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
+      "justMyCode": true
+    },
+    {
+      "name": "Streamlit",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "streamlit",
+      "args": ["run", "ui/app.py", "--server.port", "8501", "--server.headless", "true"],
+      "justMyCode": true
+    }
+  ],
+  "compounds": [
+    {
+      "name": "全サービス起動（FastAPI + Streamlit）",
+      "configurations": ["FastAPI", "Streamlit"]
+    }
+  ]
+}
