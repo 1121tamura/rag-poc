@@ -1,5 +1,5 @@
 {
-  "name": "rag-support-system",
+  "name": "rag-poc",
   "dockerComposeFile": ["../docker-compose.yml", "../docker-compose.override.yml"],
   "service": "api",
   "runServices": ["api", "qdrant"],
