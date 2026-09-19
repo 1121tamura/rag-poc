@@ -1,5 +1,12 @@
 FROM python:3.11-slim
 
+# gitはコンテナ内でのバージョン管理操作に使う。curlは疎通確認等の切り分け用。
+# build-essentialは現状の依存がすべてwheel配布のため入れていない
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir uv
 
 # コンテナ自体が隔離環境のため.venvは作らず、システムPythonに直接インストールする
