@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -5,6 +6,8 @@ from fastapi import FastAPI
 from src.infrastructure.history.sqlite_conversation_repository import init_db
 from src.interfaces.api.conversation_router import router as conversation_router
 from src.interfaces.api.query_router import router
+
+logging.basicConfig(level=logging.INFO)
 
 
 @asynccontextmanager

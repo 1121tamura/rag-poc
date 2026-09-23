@@ -1,4 +1,6 @@
 import json
+import logging
+import time
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -7,6 +9,8 @@ from pydantic import BaseModel
 from src.application.rag_service import generate_answer, save_exchange
 from src.infrastructure.history import sqlite_conversation_repository as repository
 from src.interfaces.api.dependencies import get_current_user_id
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -25,12 +29,14 @@ async def query(request: QueryRequest, user_id: str = Depends(get_current_user_i
         raise HTTPException(status_code=404, detail="会話が見つかりません")
 
     async def event_stream():
+        t0 = time.perf_counter()
         result = await generate_answer(
             request.query,
             document_type=request.document_type,
             conversation_id=request.conversation_id,
             user_id=user_id,
         )
+        t1 = time.perf_counter()  # 検索・書き換えの完了
 
         # ソースは検索完了時点（LLM生成前）で確定済みなので、生成を待たず先頭行で返す
         sources = [
@@ -46,10 +52,23 @@ async def query(request: QueryRequest, user_id: str = Depends(get_current_user_i
         # chunk.deltaは今回分の差分のみ（累積全文ではない）。生成終盤など
         # 新規テキストが無いチャンクもあるため空delta行は送らない
         answer_parts: list[str] = []
+        first_token_time: float | None = None
         async for chunk in result.response_stream:
             if chunk.delta:
+                if first_token_time is None:
+                    first_token_time = time.perf_counter()  # 最初のトークンが来た瞬間（prefill完了の目安）
                 answer_parts.append(chunk.delta)
                 yield json.dumps({"type": "token", "content": chunk.delta}, ensure_ascii=False) + "\n"
+        t2 = time.perf_counter()  # 生成完了
+
+        answer_text = "".join(answer_parts)
+        logger.info(
+            "timing: search+rewrite=%.2fs, prefill(初動)=%.2fs, decode(生成)=%.2fs, output_chars=%d",
+            t1 - t0,
+            (first_token_time - t1) if first_token_time is not None else -1,
+            (t2 - first_token_time) if first_token_time is not None else -1,
+            len(answer_text),
+        )
 
         # 保存は回答が出そろってから。質問を先に保存すると、その質問自身が履歴として読み出される
         title = None
@@ -57,7 +76,7 @@ async def query(request: QueryRequest, user_id: str = Depends(get_current_user_i
             title = await save_exchange(
                 request.conversation_id,
                 request.query,
-                "".join(answer_parts),
+                answer_text,
                 sources,
                 result.is_first_question,
             )
