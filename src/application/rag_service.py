@@ -7,7 +7,7 @@ from llama_index.core.vector_stores import ExactMatchFilter, MetadataFilters
 
 from src.infrastructure.history import sqlite_conversation_repository as repository
 from src.infrastructure.llama_index_factory import get_embed_model
-from src.infrastructure.ollama_client import get_llm
+from src.infrastructure.ollama_client import get_llm, get_llm_without_thinking
 from src.infrastructure.qdrant_vector_store import DENSE_SCORE_KEY, SPARSE_SCORE_KEY, get_vector_store
 
 TOP_K = 5
@@ -134,7 +134,7 @@ async def rewrite_query(query: str, history: list[dict]) -> tuple[str, bool]:
         ChatMessage(role=MessageRole.SYSTEM, content=REWRITE_PROMPT),
         ChatMessage(role=MessageRole.USER, content=f"会話履歴:\n{conversation}\n\n質問: {query}"),
     ]
-    response = await get_llm().achat(messages)
+    response = await get_llm_without_thinking().achat(messages)
     # str(response)は "assistant: " 込みの文字列になるためcontentから取る
     rewritten = (response.message.content or "").strip()
     if not rewritten:
@@ -148,7 +148,7 @@ async def generate_title(query: str) -> str:
         ChatMessage(role=MessageRole.SYSTEM, content=TITLE_PROMPT),
         ChatMessage(role=MessageRole.USER, content=query),
     ]
-    response = await get_llm().achat(messages)
+    response = await get_llm_without_thinking().achat(messages)
     title = (response.message.content or "").strip()
     # LLMが空や長文を返しても一覧が壊れないよう、字数で切り詰めて質問文にフォールバックする
     return title[:TITLE_MAX_LENGTH] or query[:TITLE_MAX_LENGTH]

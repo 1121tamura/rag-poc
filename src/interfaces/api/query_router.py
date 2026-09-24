@@ -50,23 +50,40 @@ async def query(request: QueryRequest, user_id: str = Depends(get_current_user_i
         yield json.dumps({"type": "sources", "sources": sources}, ensure_ascii=False) + "\n"
 
         # chunk.deltaは今回分の差分のみ（累積全文ではない）。生成終盤など
-        # 新規テキストが無いチャンクもあるため空delta行は送らない
+        # 新規テキストが無いチャンクもあるため空delta行は送らない。
+        # 思考モードがONの場合、本文より先に思考トークンがthinking_deltaで流れてくる。
+        # 画面には出さないが生成時間は消費するため、切り分けて計測する
         answer_parts: list[str] = []
+        thinking_chars = 0
+        first_thinking_time: float | None = None
+        last_thinking_time: float | None = None
         first_token_time: float | None = None
         async for chunk in result.response_stream:
+            thinking_delta = chunk.additional_kwargs.get("thinking_delta")
+            if thinking_delta:
+                if first_thinking_time is None:
+                    first_thinking_time = time.perf_counter()
+                last_thinking_time = time.perf_counter()
+                thinking_chars += len(thinking_delta)
             if chunk.delta:
                 if first_token_time is None:
-                    first_token_time = time.perf_counter()  # 最初のトークンが来た瞬間（prefill完了の目安）
+                    first_token_time = time.perf_counter()  # 本文の最初のトークンが来た瞬間
                 answer_parts.append(chunk.delta)
                 yield json.dumps({"type": "token", "content": chunk.delta}, ensure_ascii=False) + "\n"
         t2 = time.perf_counter()  # 生成完了
 
         answer_text = "".join(answer_parts)
+        # 思考が無い場合は本文の初出までをprefillとみなす（従来どおり）
+        prefill_end = first_thinking_time if first_thinking_time is not None else first_token_time
         logger.info(
-            "timing: search+rewrite=%.2fs, prefill(初動)=%.2fs, decode(生成)=%.2fs, output_chars=%d",
+            "timing: total=%.2fs (search+rewrite=%.2fs, prefill=%.2fs, thinking=%.2fs, decode=%.2fs), "
+            "thinking_chars=%d, output_chars=%d",
+            t2 - t0,
             t1 - t0,
-            (first_token_time - t1) if first_token_time is not None else -1,
+            (prefill_end - t1) if prefill_end is not None else -1,
+            (last_thinking_time - first_thinking_time) if first_thinking_time is not None else 0,
             (t2 - first_token_time) if first_token_time is not None else -1,
+            thinking_chars,
             len(answer_text),
         )
 
