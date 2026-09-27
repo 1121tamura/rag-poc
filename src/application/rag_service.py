@@ -7,7 +7,7 @@ from llama_index.core.vector_stores import ExactMatchFilter, MetadataFilters
 
 from src.infrastructure.history import sqlite_conversation_repository as repository
 from src.infrastructure.llama_index_factory import get_embed_model
-from src.infrastructure.ollama_client import get_llm
+from src.infrastructure.ollama_client import get_llm, get_llm_without_thinking
 from src.infrastructure.qdrant_vector_store import DENSE_SCORE_KEY, SPARSE_SCORE_KEY, get_vector_store
 
 TOP_K = 5
@@ -15,11 +15,13 @@ PROMPT_TOKEN_BUDGET = 4096  # 仕様書7.4。context_window=8192に対し生成�
 GENERATION_RESERVE_TOKENS = 512  # 回答生成のために確保する枠
 HISTORY_TURNS = 5  # 仕様書7.4：直近5往復
 # 仕様書7.3対策3。融合後スコアではなく融合前の生スコアで判定する。
-# 開発用サンプル文書45チャンクでの測定値（関連あり/無関係/挨拶の各質問群の1位スコア）：
-#   dense  関連あり 0.6185〜0.7811 ／ 無関係・挨拶 0.4190〜0.4942
-#   sparse 関連あり 0.1741〜0.2904 ／ 無関係・挨拶 0.0010〜0.0654
-# 両群の中間を採用。実文書の投入後に人手レビューで見直す前提（仕様書9章）
-DENSE_RELEVANCE_THRESHOLD = 0.55
+# 実文書6本75チャンクでの測定値（scripts/measure_thresholds.py・15問の結果全体の最大スコア）：
+#   dense  関連あり 0.7107〜0.7569 ／ 無関係 0.4503〜0.5905 ／ 挨拶 0.4732〜0.5383
+#   sparse 関連あり 0.2017〜0.3069 ／ 無関係 0.0155〜0.0761 ／ 挨拶 0.0046〜0.0060
+# 両群の中間を採用。denseは45チャンク時代の0.55では無関係群2問を拾ってしまったため引き上げた
+# （チャンクが増えるほど「たまたま似ている」ものが増え、無関係群のスコアが上がる）。
+# 本番文書の投入後に再測定する前提（仕様書9章）
+DENSE_RELEVANCE_THRESHOLD = 0.65
 SPARSE_RELEVANCE_THRESHOLD = 0.12
 SYSTEM_PROMPT = (
     "あなたは購買システムのドキュメントに基づいて質問に回答するアシスタントです。"
@@ -28,6 +30,8 @@ SYSTEM_PROMPT = (
     "参照文書に答えが書かれていない場合は、推測で回答せず、"
     "参照文書のどこまでが分かっていて何が記載されていないのかを具体的に伝えたうえで、"
     "どう質問し直せば見つかりそうかを添えてください。"
+    "参照文書に書かれている範囲で、質問に直接関係する内容だけを簡潔に答えてください。"
+    "前置き・注意点・補足のようなセクションや、参照文書にない一般論を付け足さないでください。"
 )
 # 関連度が閾値に満たず参照文書を渡さない場合のプロンプト（仕様書7.3対策3）。
 # 挨拶も閾値で弾かれてこちら側に入るため、自然な応答を明記している
@@ -132,7 +136,7 @@ async def rewrite_query(query: str, history: list[dict]) -> tuple[str, bool]:
         ChatMessage(role=MessageRole.SYSTEM, content=REWRITE_PROMPT),
         ChatMessage(role=MessageRole.USER, content=f"会話履歴:\n{conversation}\n\n質問: {query}"),
     ]
-    response = await get_llm().achat(messages)
+    response = await get_llm_without_thinking().achat(messages)
     # str(response)は "assistant: " 込みの文字列になるためcontentから取る
     rewritten = (response.message.content or "").strip()
     if not rewritten:
@@ -146,7 +150,7 @@ async def generate_title(query: str) -> str:
         ChatMessage(role=MessageRole.SYSTEM, content=TITLE_PROMPT),
         ChatMessage(role=MessageRole.USER, content=query),
     ]
-    response = await get_llm().achat(messages)
+    response = await get_llm_without_thinking().achat(messages)
     title = (response.message.content or "").strip()
     # LLMが空や長文を返しても一覧が壊れないよう、字数で切り詰めて質問文にフォールバックする
     return title[:TITLE_MAX_LENGTH] or query[:TITLE_MAX_LENGTH]
